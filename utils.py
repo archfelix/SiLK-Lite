@@ -126,8 +126,7 @@ def is_match_success(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor)
 
 def compute_nll_loss(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor):
     N = corr_pos.shape[0]
-    Pij = sim_mat.get_Pij(corr_pos)
-    loss = torch.sum(torch.log(Pij), dim=0) / -N
+    loss = torch.sum(sim_mat.get_Pij(corr_pos), dim=0) / -N
     return loss
 
 

@@ -31,25 +31,51 @@ class DynamicCosineSim():
 
         self.max_sik = torch.max(self.sim_mat, dim=0)[0]
         self.max_skj = torch.max(self.sim_mat, dim=1)[0]
-        self.sum_sik = torch.sum(torch.exp(self.sim_mat / self.tau), dim=0)
-        self.sum_skj = torch.sum(torch.exp(self.sim_mat / self.tau), dim=1)
+
+        # Old:
+        # self.sum_sik = torch.sum(torch.exp(self.sim_mat / self.tau), dim=0)
+        # self.sum_skj = torch.sum(torch.exp(self.sim_mat / self.tau), dim=1)
+
+        # New:
+        self.sum_sik = torch.logsumexp(self.sim_mat / self.tau, dim=0)
+        self.sum_skj = torch.logsumexp(self.sim_mat / self.tau, dim=1)
 
     def get_sim_ij(self, pos: torch.Tensor):
         # pos.shape=[N, 2]
         return torch.sum(self.desc0[pos[:, 0], :] * self.desc1[pos[:, 1], :], dim=1)
 
-    def get_Pi_to_j(self, pos: torch.Tensor):
-        # pos.shape=[N, 2]
-        # this is just a softmax
-        return torch.exp(self.get_sim_ij(pos) / self.tau) / self.sum_sik[pos[:, 0]]
+    # Old:
+    # def get_Pi_to_j(self, pos: torch.Tensor):
+    #     # pos.shape=[N, 2]
+    #     # this is just a softmax
+    #     return torch.exp(self.get_sim_ij(pos) / self.tau) / self.sum_sik[pos[:, 0]]
 
-    def get_Pi_from_j(self, pos: torch.Tensor):
+    # New:
+    def get_log_Pi_to_j(self, pos: torch.Tensor):
         # pos.shape=[N, 2]
-        # this is just a softmax
-        return torch.exp(self.get_sim_ij(pos) / self.tau) / self.sum_skj[pos[:, 1]]
+        return (self.get_sim_ij(pos) / self.tau) - self.sum_sik[pos[:, 0]]
 
+    # Old:
+    # def get_Pi_from_j(self, pos: torch.Tensor):
+    #     # pos.shape=[N, 2]
+    #     # this is just a softmax
+    #     return torch.exp(self.get_sim_ij(pos) / self.tau) / self.sum_skj[pos[:, 1]]
+
+    # New:
+    def get_log_Pi_from_j(self, pos: torch.Tensor):
+        # pos.shape=[N, 2]
+        return (self.get_sim_ij(pos) / self.tau) - self.sum_skj[pos[:, 1]]
+
+    # Old:
+    # def get_Pij(self, pos: torch.Tensor):
+    #     # self.get_Pij(torch.tensor([[i, j],
+    #     #                            [0, 1],
+    #     #                            [0, 2]]))
+    #     return torch.log(self.get_Pi_to_j(pos)) + torch.log(self.get_Pi_from_j(pos))
+
+    # New:
     def get_Pij(self, pos: torch.Tensor):
         # self.get_Pij(torch.tensor([[i, j],
         #                            [0, 1],
         #                            [0, 2]]))
-        return self.get_Pi_to_j(pos) * self.get_Pi_from_j(pos)
+        return self.get_log_Pi_to_j(pos) + self.get_log_Pi_from_j(pos)
