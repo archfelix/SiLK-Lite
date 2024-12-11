@@ -56,15 +56,15 @@ def tensor_to_img(img: torch.Tensor):
 
 
 random_homo = homo.RandomHomography()
-random_homo.scale_en = True
-random_homo.translate_en = True
-random_homo.rotation_en = True
+random_homo.scale_en = False
+random_homo.translate_en = False
+random_homo.rotation_en = False
 random_homo.perspective_en = False
 
 
 def rand_homo(img):
-    warped_img, _, _, corr0, corr1 = random_homo.warp_image(img=img)
-    return warped_img, corr0, corr1
+    sampled_img, warped_img, _, _, corr0, corr1 = random_homo.warp_image(img=img)
+    return sampled_img, warped_img, corr0, corr1
 
 
 def filter_corr(corr0: torch.Tensor, corr1: torch.Tensor, H=0, W=0):
@@ -152,9 +152,10 @@ def compute_kpt_loss(corr_tenor: torch.Tensor,
     return loss
 
 
-def compute_loss(model: SiLK, img0, block_size=100, tau=1):
-    img1, corr0, corr1 = rand_homo(img0)
-    corr_tensor = filter_corr(corr0, corr1, H=img1.shape[2], W=img1.shape[3])
+def compute_loss(model: SiLK, img0: torch.Tensor, block_size=100, tau=1):
+    img0, img1, corr0, corr1 = rand_homo(img0)
+    corr_tensor = torch.concat([corr0.unsqueeze(1), corr1.unsqueeze(1)], dim=1)
+    # corr_tensor = filter_corr(corr0, corr1, H=img1.shape[2], W=img1.shape[3])
 
     img0 = apply_augment(img0)
     img1 = apply_augment(img1)

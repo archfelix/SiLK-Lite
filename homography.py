@@ -203,18 +203,24 @@ class RandomHomography:
         invH = torch.inverse(H)
 
         # HxWx2
-        point0 = torch.dstack(torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij"))
-        point0 = point0.to(torch.float32)
-        # Nx2
+        # Generate a mesh grid and generate dense points
+        point0 = torch.dstack(torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")).to(torch.float32)
+        # Convert Mesh to Points, shaped [H*W, 2]
         point0 = point0.view((-1, 2))
-        # Nx3
+        # Original sample
+        # because the sample will adopt bilinear, the image and warped image will be different.
+        grid = torch.zeros((height*width, 2))
+        grid[:, 0:1] = point0[:, 1:2] / (width // 2) - 1
+        grid[:, 1:2] = point0[:, 0:1] / (height // 2) - 1
+        grid = grid.reshape((1, height, width, 2))
+        sampled_img = F.grid_sample(img.cpu(), grid, padding_mode='zeros', mode='bilinear', align_corners=False).to(img.device)
+
+        # Apply Homography Transform
         point0 = torch.concat([point0, torch.ones((height * width, 1))], dim=1)
-        # 3xN
         point0 = point0.permute((1, 0))
-        # 3xN
-        point1 = torch.matmul(H, point0)     # 点Homography变换
-        grid = torch.matmul(invH, point0)    # 用于图像Homography变换的grid
-        # 2xN
+        point1 = torch.matmul(H, point0)     # Point Homography Transform
+        grid = torch.matmul(invH, point0)    # Image Homography Transform
+        # 2xN, Convert from Homogeneous coordinate to Cartesian coordinate.
         point0 = point0[0:2, :]
         point1 = point1[0:2, :] / point1[2:, :]
         grid = grid[0:2, :] / grid[2:, :]
@@ -230,7 +236,17 @@ class RandomHomography:
         grid = grid.view((1, height, width, 2))
         warped_img = F.grid_sample(img.cpu(), grid, padding_mode='zeros', mode='bilinear', align_corners=False).to(img.device)
 
+        # Filter point1, muse be grater then Zero, because of mod operation
+        mask = (point1[:, 0] >= 0) & (point1[:, 1] >= 0)
+        point1 = point1[mask, :]
+        point0 = point0[mask, :]
+
+        # Attention: point0 and point1 are float, the corr0 and corr1 might overflow height*width
         corr0 = (point0[:, 0] * width + point0[:, 1] % width).to(torch.int32)
         corr1 = (point1[:, 0] * width + point1[:, 1] % width).to(torch.int32)
 
-        return warped_img, point0, point1, corr0, corr1
+        mask = ((corr1 >= 0) & (corr1 < height * width))
+        corr0 = corr0[mask]
+        corr1 = corr1[mask]
+
+        return sampled_img, warped_img, point0, point1, corr0, corr1

@@ -18,7 +18,7 @@ model.train(True)
 
 # model.load_state_dict(torch.load("./train0_5000.pth"))
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.999))
 save_every_n_image = 5000
 
 image_root_dir = "X:/COCO/train2017/train2017"
@@ -41,7 +41,7 @@ if __name__ == "__main__":
         img_tensor = torch.unsqueeze(img_tensor, dim=0)
 
         optimizer.zero_grad()
-        loss_total, loss_desc_num, loss_kpts_num, kpts_count = utils.compute_loss(model, img_tensor, block_size=1200, tau=0.1)
+        loss_total, loss_desc_num, loss_kpts_num, kpts_count = utils.compute_loss(model, img_tensor, block_size=1200, tau=0.05)
         loss_total.backward()
         optimizer.step()
 
