@@ -16,8 +16,10 @@ model = SiLK()
 model = model.to(device)
 model.train(True)
 
+# model.load_state_dict(torch.load("./train0_5000.pth"))
+
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-save_every_n_image = 1000
+save_every_n_image = 5000
 
 image_root_dir = "X:/COCO/train2017/train2017"
 
@@ -50,4 +52,3 @@ if __name__ == "__main__":
         count += 1
         if count % save_every_n_image == 0:
             torch.save(model.state_dict(), f"./train0_{count}.pth")
-            count = 0

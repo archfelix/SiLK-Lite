@@ -141,13 +141,14 @@ def compute_kpt_loss(corr_tenor: torch.Tensor,
     kpts0 = torch.maximum(torch.tensor(-70), kpts0.view(H*W))
     kpts1 = torch.maximum(torch.tensor(-70), kpts1.view(H*W))
 
-    def bce(q, y, c):
+    def BCE(q, y, c):
         # 正例: q最终会大于0
         # 负例: q最终会小于0
         # 注意, 当q接近-100的时候，sigmoid会输出0, log则会导致inf
-        return torch.sum(y*torch.log(F.sigmoid(q[c])) + (1-y) * torch.log(F.sigmoid(-q[c]))) / -N
+        # return torch.sum(y*torch.log(F.sigmoid(q[c])) + (1-y) * torch.log(F.sigmoid(-q[c]))) / -N
+        return F.binary_cross_entropy(input=F.sigmoid(q[c]), target=y, reduction='mean')
 
-    loss = bce(kpts0, y, corr_tenor[:, 0]) + bce(kpts1, y, corr_tenor[:, 1])
+    loss = BCE(kpts0, y, corr_tenor[:, 0]) + BCE(kpts1, y, corr_tenor[:, 1])
     return loss
 
 
@@ -171,10 +172,10 @@ def compute_loss(model: SiLK, img0, block_size=100, tau=1):
 
     kpts_img = torch.sigmoid(kpts0)
     img = tensor_to_img(kpts_img)
-    img[img > 0.8] = 255
+    img[img > 0.5] = 255
     cv.imshow('kpts0,', img.astype(np.uint8))
 
-    return (loss_desc + loss_kpts,
+    return (loss_desc,
             loss_desc.item(),
             loss_kpts.item(),
             count)
