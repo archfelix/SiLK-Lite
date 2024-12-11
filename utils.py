@@ -135,11 +135,12 @@ def compute_kpt_loss(corr_tenor: torch.Tensor,
                      kpts1: torch.Tensor,
                      y: torch.Tensor):
     N = y.shape[0]
-
     B, C, H, W = kpts0.shape
     assert B == 1 and C == 1
-    kpts0 = torch.maximum(torch.tensor(-70), kpts0.view(H*W))
-    kpts1 = torch.maximum(torch.tensor(-70), kpts1.view(H*W))
+    # kpts0 = torch.maximum(torch.tensor(-70), kpts0.view(H*W))
+    # kpts1 = torch.maximum(torch.tensor(-70), kpts1.view(H*W))
+    kpts0 = kpts0.view(H*W)
+    kpts1 = kpts1.view(H*W)
 
     def BCE(q, y, c):
         # 正例: q最终会大于0
@@ -176,7 +177,7 @@ def compute_loss(model: SiLK, img0: torch.Tensor, block_size=100, tau=1):
     img[img > 0.5] = 255
     cv.imshow('kpts0,', img.astype(np.uint8))
 
-    return (loss_desc,
+    return (loss_desc + loss_kpts,
             loss_desc.item(),
             loss_kpts.item(),
             count)
