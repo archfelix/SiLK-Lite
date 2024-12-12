@@ -56,14 +56,14 @@ def tensor_to_img(img: torch.Tensor):
 
 
 random_homo = homo.RandomHomography()
-random_homo.scale_en = False
-random_homo.translate_en = False
-random_homo.rotation_en = False
+random_homo.scale_en = True
+random_homo.translate_en = True
+random_homo.rotation_en = True
 random_homo.perspective_en = False
 
 
 def rand_homo(img):
-    sampled_img, warped_img, _, _, corr0, corr1 = random_homo.warp_image(img=img)
+    sampled_img, warped_img, _, _, corr0, corr1 = random_homo.generate_corrspodence(img=img)
     return sampled_img, warped_img, corr0, corr1
 
 
@@ -153,7 +153,7 @@ def compute_kpt_loss(corr_tenor: torch.Tensor,
     return loss
 
 
-def compute_loss(model: SiLK, img0: torch.Tensor, block_size=100, tau=1):
+def compute_loss(model: SiLK, img0: torch.Tensor, tau=0.05, block_size=None):
     img0, img1, corr0, corr1 = rand_homo(img0)
     corr_tensor = torch.concat([corr0.unsqueeze(1), corr1.unsqueeze(1)], dim=1)
     # corr_tensor = filter_corr(corr0, corr1, H=img1.shape[2], W=img1.shape[3])
@@ -172,10 +172,13 @@ def compute_loss(model: SiLK, img0: torch.Tensor, block_size=100, tau=1):
 
     loss_kpts = compute_kpt_loss(corr_tensor, kpts0, kpts1,  y)
 
-    kpts_img = torch.sigmoid(kpts0)
-    img = tensor_to_img(kpts_img)
-    img[img > 0.5] = 255
-    cv.imshow('kpts0,', img.astype(np.uint8))
+    kpts_img = torch.sigmoid(kpts0).cpu().view(-1)
+    topk_values, topk_indice = kpts_img.topk(500)
+    height, width = kpts0.shape[2:4]
+    img = np.zeros((height*width), dtype=np.uint8)
+    img[topk_indice.numpy()] = 255
+    img = img.reshape((height, width))
+    cv.imshow('KeyPointMap', img)
 
     return (loss_desc + loss_kpts,
             loss_desc.item(),

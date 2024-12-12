@@ -174,20 +174,43 @@ class RandomHomography:
         self.rotation_range = [-np.pi/3, np.pi/3]
         self.perspective_range = [0, 0.05]
 
-    def warp_image(self, img: torch.Tensor):
-        """进行随机单应性变换
+    def warp_points(self, points: torch.Tensor, H: torch.Tensor):
+        """warp points with homography
 
         Args:
-            img (torch.Tensor): 图片必须为[1, 1, Height, Width]的torch.float32类型的灰度图像
-
-        Returns:
-            warped_img: 进行随机变换后的图片, [1, 1, H, W]
-            point0: 原始图像的点的位置(就是meshgrid)
-            point1: 变换后图像点的位置
-            corr0: 原始图像的indices(将2D图片flatten成1D之后)
-            corr1: 变换后图像的indices(将2D图片flatten成1D之后)
-            其中corr0和corr1是一一对应的
+            points (torch.Tensor): [N, 2], [[y, x]] or [[h, w]]
+            H (torch.Tensor): [3, 3] homography matrix   [[h, w]]
         """
+        N = points.shape[0]
+        points = torch.concat([points, torch.ones((N, 1))], dim=1)
+        points = points.permute((1, 0))
+        points = torch.matmul(H, points)
+        points = points[0:2, :] / points[2:, :]
+        points = points.permute((1, 0))
+        return points
+
+    def warp_image(self, img: torch.Tensor, H: torch.Tensor):
+        """warp image with homography
+
+        Args:
+            img (torch.Tensor): [1, 1, H, W], torch.dtype = float32
+            H (torch.Tensor): [3, 3]
+        """
+        height, width = img.shape[2:4]
+        invH = torch.inverse(H)
+        # use yx mode
+        meshgrid = torch.dstack(torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")).to(torch.float32)
+        meshgrid = meshgrid.view((-1, 2))
+        grid = self.warp_points(meshgrid, invH)
+        grid[:, 0] = grid[:, 0] / (height // 2) - 1
+        grid[:, 1] = grid[:, 1] / (width // 2) - 1
+        # convert to xy mode
+        grid = torch.concat([grid[:, 1:2], grid[:, 0:1]], dim=1)
+        grid = grid.view((1, height, width, 2))
+        warped_img = F.grid_sample(img.cpu(), grid, padding_mode='zeros', mode='bilinear', align_corners=False).to(img.device)
+        return warped_img
+
+    def generate_corrspodence(self, img: torch.Tensor):
         height, width = img.shape[2:4]
         H = generate_random_homography((height, width),
                                        self.scale_en,
@@ -202,51 +225,42 @@ class RandomHomography:
         H = torch.from_numpy(H).to(torch.float32)
         invH = torch.inverse(H)
 
+        sample_img = self.warp_image(img, torch.eye(3))
+        warped_img = self.warp_image(img, H)
+
         # HxWx2
         # Generate a mesh grid and generate dense points
         point0 = torch.dstack(torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")).to(torch.float32)
         # Convert Mesh to Points, shaped [H*W, 2]
         point0 = point0.view((-1, 2))
-        # Original sample
-        # because the sample will adopt bilinear, the image and warped image will be different.
-        grid = torch.zeros((height*width, 2))
-        grid[:, 0:1] = point0[:, 1:2] / (width // 2) - 1
-        grid[:, 1:2] = point0[:, 0:1] / (height // 2) - 1
-        grid = grid.reshape((1, height, width, 2))
-        sampled_img = F.grid_sample(img.cpu(), grid, padding_mode='zeros', mode='bilinear', align_corners=False).to(img.device)
 
-        # Apply Homography Transform
-        point0 = torch.concat([point0, torch.ones((height * width, 1))], dim=1)
-        point0 = point0.permute((1, 0))
-        point1 = torch.matmul(H, point0)     # Point Homography Transform
-        grid = torch.matmul(invH, point0)    # Image Homography Transform
-        # 2xN, Convert from Homogeneous coordinate to Cartesian coordinate.
-        point0 = point0[0:2, :]
-        point1 = point1[0:2, :] / point1[2:, :]
-        grid = grid[0:2, :] / grid[2:, :]
-        # Nx2
-        point0 = point0.permute((1, 0))
-        point1 = point1.permute((1, 0))
-        grid = grid.permute((1, 0))
+        # warp point
+        point1 = self.warp_points(point0, H)
+        point0_recovered = self.warp_points(point1, invH)
 
-        # 采样
-        grid[:, 0] = grid[:, 0] / (height // 2) - 1
-        grid[:, 1] = grid[:, 1] / (width // 2) - 1
-        grid = torch.concat([grid[:, 1:2], grid[:, 0:1]], dim=1)
-        grid = grid.view((1, height, width, 2))
-        warped_img = F.grid_sample(img.cpu(), grid, padding_mode='zeros', mode='bilinear', align_corners=False).to(img.device)
+        # discard out-of-bound
+        mask = (point1[:, 0] >= 0) & \
+            (point1[:, 1] >= 0) & \
+            (point0_recovered[:, 0] >= 0) &\
+            (point0_recovered[:, 1] >= 0) & \
+            (point1[:, 0] < height) &\
+            (point1[:, 1] < width) &\
+            (point0_recovered[:, 0] < height) &\
+            (point0_recovered[:, 1] < width)
+        point0 = point0[mask]
+        point1 = point1[mask]
+        point0_recovered = point0_recovered[mask]
 
-        # Filter point1, muse be grater then Zero, because of mod operation
-        mask = (point1[:, 0] >= 0) & (point1[:, 1] >= 0)
-        point1 = point1[mask, :]
-        point0 = point0[mask, :]
+        # discard non-bijective
+        error = torch.norm(point0_recovered - point0, p=2, dim=1)
+        bijective_mask = error < 1e-3
+        point1 = point1[bijective_mask]
+        point0 = point0[bijective_mask]
 
-        # Attention: point0 and point1 are float, the corr0 and corr1 might overflow height*width
+        # discretize point
+        point0 = torch.floor(point0)
+        point1 = torch.floor(point1)
         corr0 = (point0[:, 0] * width + point0[:, 1] % width).to(torch.int32)
         corr1 = (point1[:, 0] * width + point1[:, 1] % width).to(torch.int32)
 
-        mask = ((corr1 >= 0) & (corr1 < height * width))
-        corr0 = corr0[mask]
-        corr1 = corr1[mask]
-
-        return sampled_img, warped_img, point0, point1, corr0, corr1
+        return sample_img, warped_img, point0, point1, corr0, corr1
