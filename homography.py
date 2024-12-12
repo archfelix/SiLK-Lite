@@ -239,14 +239,16 @@ class RandomHomography:
         point0_recovered = self.warp_points(point1, invH)
 
         # discard out-of-bound
-        mask = (point1[:, 0] >= 0) & \
+        mask = \
+            (point1[:, 0] >= 0) & \
             (point1[:, 1] >= 0) & \
-            (point0_recovered[:, 0] >= 0) &\
+            (point1[:, 0] < height) & \
+            (point1[:, 1] < width) & \
+            (point0_recovered[:, 0] >= 0) & \
             (point0_recovered[:, 1] >= 0) & \
-            (point1[:, 0] < height) &\
-            (point1[:, 1] < width) &\
             (point0_recovered[:, 0] < height) &\
             (point0_recovered[:, 1] < width)
+
         point0 = point0[mask]
         point1 = point1[mask]
         point0_recovered = point0_recovered[mask]

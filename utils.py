@@ -59,7 +59,7 @@ random_homo = homo.RandomHomography()
 random_homo.scale_en = True
 random_homo.translate_en = True
 random_homo.rotation_en = True
-random_homo.perspective_en = False
+random_homo.perspective_en = True
 
 
 def rand_homo(img):
