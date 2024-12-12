@@ -3,9 +3,9 @@ import torch.nn.functional as F
 import numpy as np
 import cv2 as cv
 
-from src.model import SiLK
-import homography as homo
-import dyncosim
+from .model import SiLK
+from .homography import RandomHomography
+from .dyncosim import DynamicCosineSim
 
 """
 def loss(image_0, model):
@@ -55,7 +55,7 @@ def tensor_to_img(img: torch.Tensor):
     return img.cpu().detach().squeeze().numpy()
 
 
-random_homo = homo.RandomHomography()
+random_homo = RandomHomography()
 random_homo.scale_en = True
 random_homo.translate_en = True
 random_homo.rotation_en = True
@@ -115,7 +115,7 @@ def is_match_success(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor,
 """
 
 
-def is_match_success(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor):
+def is_match_success(sim_mat: DynamicCosineSim, corr_pos: torch.Tensor):
     N = corr_pos.shape[0]
     y = torch.zeros((N), device=sim_mat.device)
     sim_corr = sim_mat.get_sim_ij(corr_pos)
@@ -124,7 +124,7 @@ def is_match_success(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor)
     return y, mask[mask].shape[0]
 
 
-def compute_nll_loss(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor):
+def compute_nll_loss(sim_mat: DynamicCosineSim, corr_pos: torch.Tensor):
     N = corr_pos.shape[0]
     loss = torch.sum(sim_mat.get_Pij(corr_pos), dim=0) / -N
     return loss
@@ -164,7 +164,7 @@ def compute_loss(model: SiLK, img0: torch.Tensor, tau=0.05, block_size=None):
     kpts0, desc0 = model.forward(img0)
     kpts1, desc1 = model.forward(img1)
 
-    sim_mat = dyncosim.DynamicCosineSim(desc0, desc1, block_size=block_size, tau=tau)
+    sim_mat = DynamicCosineSim(desc0, desc1, block_size=block_size, tau=tau)
 
     loss_desc = compute_nll_loss(sim_mat, corr_tensor)
 

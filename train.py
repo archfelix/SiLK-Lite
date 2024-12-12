@@ -1,8 +1,7 @@
 import os
 import torch
 import cv2 as cv
-from src.model import SiLK
-import src.utils as utils
+import silk
 
 device = None
 if torch.cuda.is_available():
@@ -12,7 +11,7 @@ else:
     print("CUDA is not available. Training on CPU.")
     device = torch.device("cpu")
 
-model = SiLK()
+model = silk.SiLK()
 model = model.to(device)
 model.train(True)
 
@@ -41,7 +40,7 @@ if __name__ == "__main__":
         img_tensor = torch.unsqueeze(img_tensor, dim=0)
 
         optimizer.zero_grad()
-        loss_total, loss_desc_num, loss_kpts_num, kpts_count = utils.compute_loss(model, img_tensor, tau=0.05, block_size=1920)
+        loss_total, loss_desc_num, loss_kpts_num, kpts_count = silk.compute_loss(model, img_tensor, tau=0.05, block_size=1920)
         loss_total.backward()
         optimizer.step()
 

@@ -1,8 +1,9 @@
-import homography as homo
 import torch
 import cv2 as cv
-import src.utils as utils
 import numpy as np
+
+import silk.homography as homo
+import silk.utils as utils
 
 randomhomo = homo.RandomHomography()
 randomhomo.scale_en = True
