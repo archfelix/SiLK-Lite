@@ -3,9 +3,9 @@ Simple Learned Keypoint
 This is a simple implementation of SiLK.  
 [SiLK Offical Version](https://github.com/facebookresearch/silk)
 
-> [[Arxiv Paper](https://arxiv.org/abs/2304.06194)]
-> Authors : [Pierre Gleize](https://gleize.github.io/index.html), [Weiyao Wang](https://sites.google.com/view/weiyaowang/home) and [Matt Feiszli](https://scholar.google.com/citations?user=A-wA73gAAAAJ&hl=en&oi=sra)
-> Conference : ICCV 2023
+> [[Arxiv Paper](https://arxiv.org/abs/2304.06194)]  
+> Authors : [Pierre Gleize](https://gleize.github.io/index.html), [Weiyao Wang](https://sites.google.com/view/weiyaowang/home) and [Matt Feiszli](https://scholar.google.com/citations?user=A-wA73gAAAAJ&hl=en&oi=sra)  
+> Conference : ICCV 2023  
 
 Features:  
 - Block Computation
