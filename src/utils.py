@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import numpy as np
 import cv2 as cv
 
-from model import SiLK
+from src.model import SiLK
 import homography as homo
 import dyncosim
 

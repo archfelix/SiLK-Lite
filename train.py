@@ -1,8 +1,8 @@
 import os
 import torch
 import cv2 as cv
-from model import SiLK
-import utils
+from src.model import SiLK
+import src.utils as utils
 
 device = None
 if torch.cuda.is_available():
