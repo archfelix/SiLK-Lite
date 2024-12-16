@@ -234,34 +234,26 @@ class RandomHomography:
         # Convert Mesh to Points, shaped [H*W, 2]
         point0 = point0.view((-1, 2))
 
-        # warp point
-        point1 = self.warp_points(point0, H)
-        point0_recovered = self.warp_points(point1, invH)
+        # warp point and discretize(which will induce discretization error)
+        point1 = torch.floor(self.warp_points(point0 + 0.5, H))
+        point0_recovered = torch.floor(self.warp_points(point1 + 0.5, invH))
+
+        # discard non-bijective
+        bijective_mask = (point0[:, 0] == point0_recovered[:, 0]) & (point0[:, 1] == point0_recovered[:, 1])
+        point1 = point1[bijective_mask, :]
+        point0 = point0[bijective_mask, :]
 
         # discard out-of-bound
         mask = \
             (point1[:, 0] >= 0) & \
             (point1[:, 1] >= 0) & \
             (point1[:, 0] < height) & \
-            (point1[:, 1] < width) & \
-            (point0_recovered[:, 0] >= 0) & \
-            (point0_recovered[:, 1] >= 0) & \
-            (point0_recovered[:, 0] < height) &\
-            (point0_recovered[:, 1] < width)
+            (point1[:, 1] < width)
 
         point0 = point0[mask]
         point1 = point1[mask]
-        point0_recovered = point0_recovered[mask]
 
-        # discard non-bijective
-        error = torch.norm(point0_recovered - point0, p=2, dim=1)
-        bijective_mask = error < 1e-3
-        point1 = point1[bijective_mask]
-        point0 = point0[bijective_mask]
-
-        # discretize point
-        point0 = torch.floor(point0)
-        point1 = torch.floor(point1)
+        # YX to Indice
         corr0 = (point0[:, 0] * width + point0[:, 1] % width).to(torch.int32)
         corr1 = (point1[:, 0] * width + point1[:, 1] % width).to(torch.int32)
 

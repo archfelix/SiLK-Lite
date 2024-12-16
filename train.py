@@ -15,7 +15,7 @@ model = silk.SiLK()
 model = model.to(device)
 model.train(True)
 
-model.load_state_dict(torch.load("./train2_5000.pth"))
+# model.load_state_dict(torch.load("./train2_5000.pth"))
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.999))
 save_every_n_image = 5000
@@ -50,4 +50,4 @@ if __name__ == "__main__":
 
         count += 1
         if count % save_every_n_image == 0:
-            torch.save(model.state_dict(), f"./train3_{count}.pth")
+            torch.save(model.state_dict(), f"./train0_{count}.pth")
