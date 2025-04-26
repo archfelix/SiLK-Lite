@@ -5,16 +5,20 @@ import numpy as np
 import silk.homography as homo
 import silk.utils as utils
 
+"""
+这个文件用于生成特定变换矩阵的图片,用于检验算法是否正确
+"""
+
 randomhomo = homo.RandomHomography()
-randomhomo.scale_en = True
+randomhomo.scale_en = False
 randomhomo.translate_en = True
-randomhomo.rotation_en = True
-randomhomo.perspective_en = True
+randomhomo.rotation_en = False
+randomhomo.perspective_en = False
 
-img = cv.imread('test.jpg', cv.IMREAD_GRAYSCALE)
-img = cv.resize(img, (320, 240))
+img = cv.imread('img0.jpg', cv.IMREAD_GRAYSCALE)
+img = cv.resize(img, (160, 120))
 
-img_tensor = utils.img_to_tensor(img)
+img_tensor = utils.img_to_tensor(img, normalization=False)
 while True:
     sample_img, warped_img, point0, point1, corr0, corr1 = randomhomo.generate_corrspodence(img_tensor)
     sample_img = sample_img.squeeze().detach().to(torch.uint8).numpy()
@@ -29,4 +33,4 @@ while True:
         cv.circle(_warped_img, (int(x1), int(y1)), 1, (255, -1))
         cv.imshow('sample_img', _sample_img)
         cv.imshow('wraped_img', _warped_img)
-        cv.waitKey(0)
+        cv.waitKey(1)

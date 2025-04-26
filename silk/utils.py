@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import cv2 as cv
+import albumentations as A
 
 from .model import SiLK
 from .homography import RandomHomography
@@ -37,22 +38,49 @@ def loss(image_0, model):
     return loss_desc + loss_kpts
 """
 
+silk_augmentation = A.Compose([
+    A.Blur(
+        p=0.1,
+        blur_limit=(3, 3)
+    ),
+    A.MotionBlur(
+        p=0.2,
+        blur_limit=(3, 3)
+    ),
+    A.RandomBrightnessContrast(
+        p=0.5,
+        brightness_limit=(-0.1, 0),
+        contrast_limit=(-0.1, 0.1)
+    ),
+    A.GaussNoise(
+        p=0.5,
+        std_range=(0.01, 0.03),
+    )
+], p=0.95)
 
-def img_to_tensor(img: np.ndarray):
+
+def img_to_tensor(img: np.ndarray, device=torch.device("cpu"), normalization=False):
     """_summary_
 
     Args:
         img (np.ndarray): [Height, Width]
     """
 
-    img_tensor = torch.from_numpy(img).to(torch.float32)
+    img_tensor = torch.from_numpy(img).to(torch.float32).to(device)
     img_tensor = img_tensor.unsqueeze(0)
     img_tensor = img_tensor.unsqueeze(0)
+    if normalization:
+        img_tensor = img_tensor / 255.0
     return img_tensor
 
 
 def tensor_to_img(img: torch.Tensor):
     return img.cpu().detach().squeeze().numpy()
+
+
+def tensor_show(win, img: torch.Tensor):
+    img = tensor_to_img(img * 255).astype(np.uint8)
+    cv.imshow(win, img)
 
 
 random_homo = RandomHomography()
@@ -67,52 +95,13 @@ def rand_homo(img):
     return sampled_img, warped_img, corr0, corr1
 
 
-def filter_corr(corr0: torch.Tensor, corr1: torch.Tensor, H=0, W=0):
-    mask = ((corr1 >= 0) & (corr1 < H*W))
-    corr_tensor = torch.concat([corr0[mask].unsqueeze(1), corr1[mask].unsqueeze(1)], dim=1)
-    return corr_tensor
-
-
-def apply_augment(img):
-    return img
-
-
-"""
-# Used for block-computation, but it is not necessary
-def compute_nll_loss(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor, block_size=100):
-    loss = torch.zeros((1), device=sim_mat.device)
-    N = corr_pos.shape[0]
-    B = N // block_size
-    Left = N % block_size
-    # 分块计算
-    for i in range(B):
-        loss += torch.sum(torch.log(sim_mat.get_Pij(corr_pos[i*block_size:(i+1)*block_size, :])), 0)
-    # 处理剩余
-    if Left > 0:
-        loss += torch.sum(torch.log(sim_mat.get_Pij(corr_pos[i*block_size:i*block_size + Left, :])), 0)
-    loss = loss / -N
-    return loss
-
-
-def is_match_success(sim_mat: dyncosim.DynamicCosineSim, corr_pos: torch.Tensor, block_size=100, min_score=0.6):
-    N = corr_pos.shape[0]
-    y = torch.zeros((N), device=sim_mat.device)
-    B = N // block_size
-    Left = N % block_size
-    # 分块计算
-    for i in range(B):
-        matching_score = sim_mat.get_Pij(corr_pos[i*block_size:(i+1)*block_size, :])
-        mask = matching_score > min_score
-        y[i*block_size:(i+1)*block_size][mask] = 1.0
-
-    # 处理剩余
-    if Left > 0:
-        matching_score = sim_mat.get_Pij(corr_pos[i*block_size:i*block_size + Left, :])
-        mask = matching_score > min_score
-        y[i*block_size:i*block_size + Left][mask] = 1.0
-
-    return y
-"""
+def apply_augment(img_tensor: torch.Tensor):
+    """
+    img=[1, 1, H, W]
+    """
+    img = tensor_to_img(img_tensor)
+    result = silk_augmentation(image=img)
+    return img_to_tensor(result['image'], device=img_tensor.device)
 
 
 def is_match_success(sim_mat: DynamicCosineSim, corr_pos: torch.Tensor):
@@ -137,15 +126,10 @@ def compute_kpt_loss(corr_tenor: torch.Tensor,
     N = y.shape[0]
     B, C, H, W = kpts0.shape
     assert B == 1 and C == 1
-    # kpts0 = torch.maximum(torch.tensor(-70), kpts0.view(H*W))
-    # kpts1 = torch.maximum(torch.tensor(-70), kpts1.view(H*W))
     kpts0 = kpts0.view(H*W)
     kpts1 = kpts1.view(H*W)
 
     def BCE(q, y, c):
-        # 正例: q最终会大于0
-        # 负例: q最终会小于0
-        # 注意, 当q接近-100的时候，sigmoid会输出0, log则会导致inf
         # return torch.sum(y*torch.log(F.sigmoid(q[c])) + (1-y) * torch.log(F.sigmoid(-q[c]))) / -N
         return F.binary_cross_entropy(input=F.sigmoid(q[c]), target=y, reduction='mean')
 
@@ -156,10 +140,13 @@ def compute_kpt_loss(corr_tenor: torch.Tensor,
 def compute_loss(model: SiLK, img0: torch.Tensor, tau=0.05, block_size=None):
     img0, img1, corr0, corr1 = rand_homo(img0)
     corr_tensor = torch.concat([corr0.unsqueeze(1), corr1.unsqueeze(1)], dim=1)
-    # corr_tensor = filter_corr(corr0, corr1, H=img1.shape[2], W=img1.shape[3])
 
     img0 = apply_augment(img0)
     img1 = apply_augment(img1)
+
+    # used to show the effect of augmentation
+    # tensor_show('img0', img0)
+    # tensor_show('img1', img1)
 
     kpts0, desc0 = model.forward(img0)
     kpts1, desc1 = model.forward(img1)
@@ -171,14 +158,6 @@ def compute_loss(model: SiLK, img0: torch.Tensor, tau=0.05, block_size=None):
     y, count = is_match_success(sim_mat, corr_tensor)
 
     loss_kpts = compute_kpt_loss(corr_tensor, kpts0, kpts1,  y)
-
-    kpts_img = torch.sigmoid(kpts0).cpu().view(-1)
-    topk_values, topk_indice = kpts_img.topk(500)
-    height, width = kpts0.shape[2:4]
-    img = np.zeros((height*width), dtype=np.uint8)
-    img[topk_indice.numpy()] = 255
-    img = img.reshape((height, width))
-    cv.imshow('KeyPointMap', img)
 
     return (loss_desc + loss_kpts,
             loss_desc.item(),

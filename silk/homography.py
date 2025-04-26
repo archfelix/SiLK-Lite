@@ -222,6 +222,8 @@ class RandomHomography:
                                        self.rotation_range,
                                        self.perspective_range)
 
+        # print(H)
+        
         H = torch.from_numpy(H).to(torch.float32)
         invH = torch.inverse(H)
 
